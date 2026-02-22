@@ -10,8 +10,8 @@ from pydantic import BaseModel, Field, model_validator
 
 
 # ==================== Tool Use / Function Calling Models ====================
-# NOTE: Tool use is NOT supported by the underlying chatjimmy.ai API.
-# These models are kept for API compatibility but will raise errors if used.
+# NOTE: Tool use is NOT natively supported by the underlying chatjimmy.ai API.
+# These models are available when ENABLE_TOOLS=true (prompt engineering mode).
 
 class FunctionDefinition(BaseModel):
     """Function definition for tool use."""
@@ -110,44 +110,57 @@ class ChatCompletionRequest(BaseModel):
     stop: str | list[str] | None = Field(
         default=None, description="Stop sequences"
     )
-    # NOTE: tools and tool_choice are NOT supported by chatjimmy.ai API
-    # They are kept for API compatibility but will raise validation errors if used
+    # Tool use - disabled by default, enable with ENABLE_TOOLS=true
     tools: list[ToolFunction] | None = Field(
-        default=None, description="[NOT SUPPORTED] A list of tools the model may call"
+        default=None, description="A list of tools the model may call (requires ENABLE_TOOLS=true)"
     )
     tool_choice: Literal["none", "auto", "required"] | dict | None = Field(
-        default=None, description="[NOT SUPPORTED] Controls tool calling behavior"
+        default=None, description="Controls tool calling behavior (requires ENABLE_TOOLS=true)"
     )
-    # NOTE: response_format is NOT supported by chatjimmy.ai API
-    # It is kept for API compatibility but will raise validation errors if used
+    # JSON mode - disabled by default, enable with ENABLE_JSON_MODE=true
     response_format: ResponseFormat | None = Field(
-        default=None, description="[NOT SUPPORTED] Format specification for the response"
+        default=None, description="Format specification for the response (requires ENABLE_JSON_MODE=true for non-text)"
     )
     user: str | None = Field(
         default=None, description="A unique identifier for the end-user"
     )
+    
+    # Feature flags (injected by validator)
+    _enable_tools: bool = False
+    _enable_json_mode: bool = False
+
+    def model_post_init(self, __context: Any) -> None:
+        """Initialize feature flags from context if available."""
+        if __context and hasattr(__context, 'get'):
+            self._enable_tools = __context.get('enable_tools', False)
+            self._enable_json_mode = __context.get('enable_json_mode', False)
 
     @model_validator(mode="after")
     def validate_unsupported_features(self) -> "ChatCompletionRequest":
-        """Validate that unsupported features are not used."""
-        if self.tools is not None:
-            raise ValueError(
-                "Tool use (tools parameter) is not supported by the chatjimmy.ai API. "
-                "The underlying model (Llama 3.1 8B on Taalas HC1) does not support "
-                "native function calling. Please implement tool calling logic in your "
-                "application code instead."
-            )
-        if self.tool_choice is not None and self.tool_choice != "none":
-            raise ValueError(
-                "Tool choice (tool_choice parameter) is not supported by the chatjimmy.ai API. "
-                "The underlying model does not support native function calling."
-            )
-        if self.response_format is not None and self.response_format.type != "text":
-            raise ValueError(
-                "JSON mode / Structured outputs (response_format parameter) are not supported "
-                "by the chatjimmy.ai API. The underlying model does not guarantee valid JSON output. "
-                "Please request JSON format in your prompt and parse the response in your application code."
-            )
+        """Validate that unsupported features are not used when disabled."""
+        # Check tools - only validate if feature is disabled
+        if not self._enable_tools:
+            if self.tools is not None:
+                raise ValueError(
+                    "Tool use (tools parameter) is not enabled. "
+                    "Set ENABLE_TOOLS=true to enable experimental tool use via prompt engineering. "
+                    "WARNING: This is simulated and may not work reliably."
+                )
+            if self.tool_choice is not None and self.tool_choice != "none":
+                raise ValueError(
+                    "Tool choice (tool_choice parameter) is not enabled. "
+                    "Set ENABLE_TOOLS=true to enable experimental tool use via prompt engineering."
+                )
+        
+        # Check JSON mode - only validate if feature is disabled
+        if not self._enable_json_mode:
+            if self.response_format is not None and self.response_format.type != "text":
+                raise ValueError(
+                    "JSON mode / Structured outputs (response_format parameter) are not enabled. "
+                    "Set ENABLE_JSON_MODE=true to enable experimental JSON mode via prompt engineering. "
+                    "WARNING: Output may not be valid JSON."
+                )
+        
         return self
 
     def get_system_prompt(self) -> str:
@@ -166,10 +179,65 @@ class ChatCompletionRequest(BaseModel):
         ]
 
     def build_system_prompt(self) -> str:
-        """Build system prompt for the chat API."""
-        # Only return the base system prompt without any prompt engineering
-        # Tool use and JSON mode are explicitly disabled as they're not supported
-        return self.get_system_prompt()
+        """Build system prompt for the chat API.
+        
+        When experimental features are enabled, includes prompt engineering instructions.
+        """
+        base_prompt = self.get_system_prompt()
+        parts = [base_prompt] if base_prompt else []
+
+        # Add tool instructions if enabled and tools are provided
+        if self._enable_tools and self.tools:
+            tool_instructions = self._build_tool_instructions()
+            parts.append(tool_instructions)
+
+        # Add JSON schema instructions if enabled and requested
+        if self._enable_json_mode and self.response_format and self.response_format.type != "text":
+            json_instructions = self._build_json_instructions()
+            parts.append(json_instructions)
+
+        return "\n\n".join(parts)
+
+    def _build_tool_instructions(self) -> str:
+        """Build tool instructions for prompt engineering.
+        
+        WARNING: This is experimental and may not work reliably.
+        """
+        lines = ["You have access to the following tools:"]
+
+        for tool in self.tools or []:
+            func = tool.function
+            lines.append(f"\n## {func.name}")
+            lines.append(f"Description: {func.description}")
+            if func.parameters:
+                lines.append(f"Parameters: {func.parameters}")
+
+        lines.append("\nWhen you need to call a tool, respond in this JSON format:")
+        lines.append('{"tool": "tool_name", "arguments": {...}}')
+
+        if self.tool_choice == "none":
+            lines.append("\nDo not use any tools. Respond directly.")
+        elif self.tool_choice == "required":
+            lines.append("\nYou MUST use a tool to answer.")
+        else:
+            lines.append("\nUse a tool only if it helps answer the user's question.")
+
+        return "\n".join(lines)
+
+    def _build_json_instructions(self) -> str:
+        """Build JSON format instructions for prompt engineering.
+        
+        WARNING: This is experimental and output may not be valid JSON.
+        """
+        lines = ["You must respond in valid JSON format."]
+
+        if self.response_format and self.response_format.json_schema:
+            lines.append("\nFollow this JSON schema:")
+            lines.append(str(self.response_format.json_schema))
+
+        lines.append("\nDo not include any text outside the JSON object.")
+
+        return "\n".join(lines)
 
 
 # ==================== Response Models ====================

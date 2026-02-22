@@ -171,6 +171,8 @@ Once running, visit:
 | `API_KEY` | Recommended | - | API key for client authentication |
 | `CHATJIMMY_BASE_URL` | No | `https://chatjimmy.ai` | chatjimmy API base URL |
 | `CHATJIMMY_TIMEOUT` | No | `30` | Request timeout in seconds |
+| `ENABLE_TOOLS` | No | `false` | Enable experimental tool use |
+| `ENABLE_JSON_MODE` | No | `false` | Enable experimental JSON mode |
 | `PORT` | No | `8000` | Server port |
 | `HOST` | No | `0.0.0.0` | Server host |
 | `LOG_LEVEL` | No | `info` | Logging level |
@@ -344,61 +346,61 @@ This API is a compatibility layer over chatjimmy.ai, which has some inherent lim
 - **Context Length**: ~6,064 tokens maximum input
 - **No Multi-modal**: Text only, no image/audio support
 
-### ⚠️ Unsupported Features (Return 400 Error)
+### ⚠️ Experimental Features (Disabled by Default)
 
-The following OpenAI API features are **explicitly disabled** and will return a 400 error:
+The following OpenAI API features are available as **experimental features** that can be enabled via environment variables:
 
-| Feature | Status | Reason |
-|---------|--------|--------|
-| `tools` | ❌ **Disabled** | chatjimmy.ai does not support native tool calling |
-| `tool_choice` | ❌ **Disabled** | chatjimmy.ai does not support native tool calling |
-| `response_format` (json_object/json_schema) | ❌ **Disabled** | chatjimmy.ai does not guarantee valid JSON output |
+| Feature | Status | Environment Variable |
+|---------|--------|---------------------|
+| `tools` | ⚠️ **Experimental** | `ENABLE_TOOLS=true` |
+| `tool_choice` | ⚠️ **Experimental** | `ENABLE_TOOLS=true` |
+| `response_format` (json_object/json_schema) | ⚠️ **Experimental** | `ENABLE_JSON_MODE=true` |
 
-**Why these are disabled:**
+**⚠️ WARNING**: These features use prompt engineering and are not natively supported by the underlying model. They may not work reliably.
 
-These features were previously simulated via prompt engineering, but this approach:
-1. Does not comply with OpenAI API standards (no guaranteed behavior)
-2. Produces unreliable results (model may not follow instructions)
-3. Creates a false sense of compatibility
+**Enable experimental features:**
 
-**Alternative approaches:**
+```bash
+# Enable tool use
+export ENABLE_TOOLS=true
 
-Instead of using `tools`, implement tool calling in your application:
+# Enable JSON mode
+export ENABLE_JSON_MODE=true
 
-```python
-# Don't do this:
-response = client.chat.completions.create(
-    model="llama3.1-8B",
-    messages=messages,
-    tools=tools,  # ❌ Will return 400 error
-)
-
-# Do this instead:
-response = client.chat.completions.create(
-    model="llama3.1-8B",
-    messages=messages_with_tool_descriptions,
-)
-# Parse response and handle tool calls in your code
+# Or both
+export ENABLE_TOOLS=true
+export ENABLE_JSON_MODE=true
 ```
 
-Instead of using `response_format`, parse JSON manually:
+**Using experimental features:**
 
 ```python
-# Don't do this:
-response = client.chat.completions.create(
-    model="llama3.1-8B",
-    messages=messages,
-    response_format={"type": "json_object"},  # ❌ Will return 400 error
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://your-api.onrender.com/v1",
+    api_key="your-api-key",
 )
 
-# Do this instead:
+# Tool use (requires ENABLE_TOOLS=true)
 response = client.chat.completions.create(
     model="llama3.1-8B",
-    messages=messages_with_json_instructions,
+    messages=[{"role": "user", "content": "What's the weather?"}],
+    tools=tools,
 )
-import json
-data = json.loads(response.choices[0].message.content)
+
+# JSON mode (requires ENABLE_JSON_MODE=true)
+response = client.chat.completions.create(
+    model="llama3.1-8B",
+    messages=[{"role": "user", "content": "List 3 planets"}],
+    response_format={"type": "json_object"},
+)
 ```
+
+**Important notes for experimental features:**
+- **No reliability guarantee**: Model may not follow instructions
+- **No schema validation**: JSON output is not validated against schema
+- **Application-level handling recommended**: Always validate outputs and have fallback logic
 
 ### Other Limitations
 

@@ -31,6 +31,17 @@ class Settings(BaseSettings):
         description="Request timeout in seconds",
     )
 
+    # Feature flags for experimental features
+    # WARNING: These features use prompt engineering and do not guarantee reliable results
+    enable_tools: bool = Field(
+        default=False,
+        description="Enable Tool Use / Function Calling via prompt engineering. WARNING: This is simulated and may not work reliably.",
+    )
+    enable_json_mode: bool = Field(
+        default=False,
+        description="Enable JSON Mode / Structured Outputs via prompt engineering. WARNING: This is simulated and output may not be valid JSON.",
+    )
+
     # Server settings
     port: int = Field(default=8000, description="Port to run the server on")
     host: str = Field(default="0.0.0.0", description="Host to bind the server to")

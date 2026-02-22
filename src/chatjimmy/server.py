@@ -29,6 +29,8 @@ from chatjimmy.models import (
     ModelInfo,
     ModelList,
     StreamingChoice,
+    ToolCall,
+    ToolCallFunction,
     Usage,
 )
 
@@ -69,22 +71,29 @@ async def lifespan(app: FastAPI):
     logger.info(f"Starting server with base URL: {settings.chatjimmy_base_url}")
     if settings.proxies or get_proxy_config():
         logger.info("Proxy configuration detected")
+    
+    # Log feature flags
+    if settings.enable_tools:
+        logger.warning("ENABLE_TOOLS is set to true. Tool use is experimental and uses prompt engineering.")
+    if settings.enable_json_mode:
+        logger.warning("ENABLE_JSON_MODE is set to true. JSON mode is experimental and output may not be valid JSON.")
+    
     yield
     # Shutdown
     logger.info("Shutting down server")
 
 
 # Create FastAPI app
+settings = get_settings()
 app = FastAPI(
     title="ChatJimmy OpenAI Compatible API",
     description="OpenAI-compatible API wrapper for chatjimmy.ai (Taalas HC1 inference). "
-                "NOTE: Tool use and JSON mode are NOT supported by the underlying API.",
+                "NOTE: Tool use and JSON mode are experimental features disabled by default.",
     version="0.1.0",
     lifespan=lifespan,
 )
 
 # Add CORS middleware
-settings = get_settings()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -172,9 +181,9 @@ async def list_models(api_key: str = Depends(verify_api_key)):
             data=[
                 ModelInfo(
                     id=m.id,
-                    object=m.get("object", "model"),
-                    created=m.get("created", 0),
-                    owned_by=m.get("owned_by", ""),
+                    object=m.object,
+                    created=m.created,
+                    owned_by=m.owned_by,
                 )
                 for m in models
             ]
@@ -217,6 +226,35 @@ def map_temperature_to_top_k(temperature: float | None, top_k: int | None) -> in
     return max(1, min(40, int(temperature * 20)))
 
 
+def parse_tool_calls_from_response(text: str) -> tuple[str, list[ToolCall] | None]:
+    """Attempt to parse tool calls from response text.
+    
+    WARNING: This is experimental and may not work reliably.
+    Only used when ENABLE_TOOLS=true.
+    """
+    # Try to find JSON tool call in the response
+    try:
+        # Look for patterns like {"tool": "name", "arguments": {...}}
+        text = text.strip()
+        if text.startswith("{") and text.endswith("}"):
+            data = json.loads(text)
+            if "tool" in data and "arguments" in data:
+                tool_name = data["tool"]
+                arguments = json.dumps(data["arguments"])
+                return "", [
+                    ToolCall(
+                        function=ToolCallFunction(
+                            name=tool_name,
+                            arguments=arguments,
+                        )
+                    )
+                ]
+    except (json.JSONDecodeError, TypeError):
+        pass
+    
+    return text, None
+
+
 def create_chat_completion_response(
     request: ChatCompletionRequest,
     text: str,
@@ -225,15 +263,20 @@ def create_chat_completion_response(
     """Create a chat completion response."""
     usage = convert_stats_to_usage(stats)
     
+    # Check if response contains tool calls (only when tools are enabled)
+    content, tool_calls = parse_tool_calls_from_response(text) if request._enable_tools else (text, None)
+    
     # Determine finish reason
     finish_reason = "stop"
-    if stats and stats.done_reason == "length":
+    if tool_calls:
+        finish_reason = "tool_calls"
+    elif stats and stats.done_reason == "length":
         finish_reason = "length"
     
     message = ChoiceMessage(
         role="assistant",
-        content=text if text else None,
-        tool_calls=None,  # Tool calls are not supported
+        content=content if content else None,
+        tool_calls=tool_calls,
     )
     
     return ChatCompletionResponse(
@@ -255,7 +298,7 @@ async def stream_chat_completion(
     """Stream chat completion response."""
     client = get_chatjimmy_client()
     
-    # Get system prompt (no prompt engineering for unsupported features)
+    # Get system prompt with optional prompt engineering for enabled features
     system_prompt = request.build_system_prompt()
     
     # Map parameters
@@ -347,11 +390,23 @@ async def stream_chat_completion(
 
 @app.post("/v1/chat/completions")
 async def create_chat_completion(
-    request: ChatCompletionRequest,
+    request_data: dict,
     api_key: str = Depends(verify_api_key),
 ):
     """Create a chat completion."""
+    settings = get_settings()
+    
     try:
+        # Inject feature flags into request validation context
+        request_data_with_context = request_data.copy()
+        request_data_with_context['_enable_tools'] = settings.enable_tools
+        request_data_with_context['_enable_json_mode'] = settings.enable_json_mode
+        
+        # Validate and create request object
+        request = ChatCompletionRequest.model_validate(request_data_with_context)
+        request._enable_tools = settings.enable_tools
+        request._enable_json_mode = settings.enable_json_mode
+        
         if request.stream:
             # Return streaming response
             return StreamingResponse(
@@ -362,7 +417,7 @@ async def create_chat_completion(
             # Return non-streaming response
             client = get_chatjimmy_client()
             
-            # Get system prompt (no prompt engineering for unsupported features)
+            # Get system prompt with optional prompt engineering for enabled features
             system_prompt = request.build_system_prompt()
             
             # Map parameters
@@ -387,7 +442,7 @@ async def create_chat_completion(
     except HTTPException:
         raise
     except ValueError as e:
-        # Handle validation errors (e.g., unsupported features)
+        # Handle validation errors (e.g., disabled features)
         logger.warning(f"Validation error: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

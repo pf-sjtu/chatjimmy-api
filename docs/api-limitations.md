@@ -28,86 +28,117 @@ ChatJimmy 是一个非官方的 OpenAI 兼容 API 封装，底层使用 [chatjim
 | `top_k` | ✅ | 直接传递 | 默认 8，范围 1-40 |
 | `max_tokens` | ⚠️ | 提示工程 | 无法强制执行限制 |
 | `stop` | ❌ | 忽略 | 底层 API 不支持 |
-| `tools` | ❌ | **禁用** | 底层 API 不支持原生工具调用 |
-| `tool_choice` | ❌ | **禁用** | 底层 API 不支持原生工具调用 |
-| `response_format` | ❌ | **禁用** | 底层 API 不支持结构化输出 |
+| `tools` | ⚠️ | **环境开关** | 需设置 `ENABLE_TOOLS=true` |
+| `tool_choice` | ⚠️ | **环境开关** | 需设置 `ENABLE_TOOLS=true` |
+| `response_format` | ⚠️ | **环境开关** | 需设置 `ENABLE_JSON_MODE=true` |
 | `user` | ✅ | 忽略 | 用于追踪，不传递给模型 |
 
-### ⚠️ 重要：不支持的功能
+## 实验性功能（需手动启用）
 
-以下 OpenAI API 功能**明确禁用**，如果使用将返回 400 错误：
+以下功能默认**禁用**，需要通过环境变量启用：
 
-#### 1. Tool Use / Function Calling (`tools`, `tool_choice`)
+### Tool Use / Function Calling
 
-**状态**: ❌ **不支持**
+**状态**: ⚠️ **实验性** - 需设置 `ENABLE_TOOLS=true`
 
-**原因**: 
-- chatjimmy.ai API 底层模型（Llama 3.1 8B on Taalas HC1）不支持原生工具调用
-- 通过提示词工程模拟工具调用不可靠，不符合 OpenAI API 标准行为
-- 模型可能不遵循提示格式，导致不可预期的输出
+**警告**:
+- 通过提示词工程模拟，不是原生支持
+- 可靠性无法保证
+- 模型可能不遵循格式要求
 
-**替代方案**:
-```python
-# 不要在请求中使用 tools 参数
-# 而是在系统提示中描述工具，并在应用层解析响应
-
-system_prompt = """You have access to a weather tool. 
-If the user asks about weather, respond with:
-TOOL_CALL: get_weather(location=<location>)
-
-Otherwise respond normally."""
-
-response = client.chat.completions.create(
-    model="llama3.1-8B",
-    messages=[
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": "What's the weather in Paris?"}
-    ]
-)
-
-# 在应用层解析响应
-if "TOOL_CALL:" in response.choices[0].message.content:
-    # 解析工具调用并执行
-    pass
+**启用方式**:
+```bash
+export ENABLE_TOOLS=true
 ```
 
-#### 2. JSON Mode / Structured Outputs (`response_format`)
-
-**状态**: ❌ **不支持**
-
-**原因**:
-- chatjimmy.ai API 不提供 JSON 模式保证
-- 模型可能输出非 JSON 内容，即使要求 JSON 格式
-- 没有内置的 JSON Schema 验证
-
-**替代方案**:
+**使用示例**:
 ```python
-# 不要在请求中使用 response_format 参数
-# 而是在提示中要求 JSON 格式，并在应用层解析和验证
+from openai import OpenAI
 
-system_prompt = """You must respond in valid JSON format only.
-Do not include any text outside the JSON object."""
+client = OpenAI(
+    base_url="https://your-api.onrender.com/v1",
+    api_key="your-api-key",
+)
+
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_weather",
+            "description": "Get current weather for a location",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "location": {"type": "string"}
+                },
+                "required": ["location"]
+            }
+        }
+    }
+]
 
 response = client.chat.completions.create(
     model="llama3.1-8B",
-    messages=[
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": "List 3 planets"}
-    ]
+    messages=[{"role": "user", "content": "What's the weather in Paris?"}],
+    tools=tools,
+    tool_choice="auto",
 )
 
-# 在应用层解析和验证 JSON
+# Check if model wants to call a tool
+if response.choices[0].finish_reason == "tool_calls":
+    tool_call = response.choices[0].message.tool_calls[0]
+    print(f"Tool: {tool_call.function.name}")
+    print(f"Arguments: {tool_call.function.arguments}")
+```
+
+**限制**:
+- **可靠性不如原生支持**：模型可能不遵循格式要求
+- **单次调用**：当前实现仅支持单次工具调用
+- **无自动执行**：后端不会自动执行工具，仅返回调用请求
+- **格式敏感**：依赖模型输出正确的 JSON 格式
+
+### JSON Mode / Structured Outputs
+
+**状态**: ⚠️ **实验性** - 需设置 `ENABLE_JSON_MODE=true`
+
+**警告**:
+- 通过提示词工程模拟
+- 不保证输出一定是有效 JSON
+- 无 Schema 验证
+
+**启用方式**:
+```bash
+export ENABLE_JSON_MODE=true
+```
+
+**使用示例**:
+```python
+response = client.chat.completions.create(
+    model="llama3.1-8B",
+    messages=[{
+        "role": "user",
+        "content": "List 3 planets in our solar system"
+    }],
+    response_format={"type": "json_object"},
+)
+
 import json
 try:
     data = json.loads(response.choices[0].message.content)
+    print(data)
 except json.JSONDecodeError:
-    # 处理解析错误
-    pass
+    # Handle invalid JSON
+    print("Model did not return valid JSON")
 ```
 
-### 参数映射说明
+**限制**:
+- **无 Schema 验证**：后端不验证输出是否符合 schema
+- **无保证格式**：模型可能输出非 JSON 内容
+- **无重试机制**：如果输出无效，不会自动重试
 
-#### Temperature → Top-K 映射
+## 参数映射说明
+
+### Temperature → Top-K 映射
 
 由于底层 API 不支持 `temperature`，我们使用以下映射关系：
 
@@ -177,7 +208,7 @@ top_k = max(1, min(40, int(temperature * 20)))
 | 状态码 | 场景 |
 |--------|------|
 | 200 | 成功 |
-| 400 | 请求参数验证失败（如使用了不支持的功能） |
+| 400 | 请求参数验证失败（如使用了未启用的功能） |
 | 401 | API Key 无效或缺失 |
 | 422 | 请求格式验证失败 |
 | 502 | 上游 API 错误 |
@@ -200,18 +231,26 @@ top_k = max(1, min(40, int(temperature * 20)))
 
 ### 常见错误
 
-#### 使用了不支持的功能
+#### 功能未启用
 
 ```json
 {
   "error": {
-    "message": "Tool use (tools parameter) is not supported by the chatjimmy.ai API. The underlying model (Llama 3.1 8B on Taalas HC1) does not support native function calling. Please implement tool calling logic in your application code instead.",
+    "message": "Tool use (tools parameter) is not enabled. Set ENABLE_TOOLS=true to enable experimental tool use via prompt engineering. WARNING: This is simulated and may not work reliably.",
     "type": "invalid_request_error",
     "param": "tools",
     "code": null
   }
 }
 ```
+
+#### 空响应
+
+**症状**：返回 200 但内容为空
+
+**原因**：输入超过 ~6,064 tokens
+
+**解决**：截断或压缩输入文本
 
 ## 与 OpenAI API 的兼容性对比
 
@@ -228,11 +267,11 @@ top_k = max(1, min(40, int(temperature * 20)))
 - **参数**：temperature 映射到 top_k
 - **统计信息**：tokens 统计来自上游 API
 
-### 明确禁用（返回 400 错误）
+### 实验性（需环境变量启用）
 
-- ❌ `tools` - 工具调用
-- ❌ `tool_choice` - 工具选择
-- ❌ `response_format` (json_object/json_schema) - JSON 模式
+- ⚠️ `tools` - 工具调用（`ENABLE_TOOLS=true`）
+- ⚠️ `tool_choice` - 工具选择（`ENABLE_TOOLS=true`）
+- ⚠️ `response_format` (json_object/json_schema) - JSON 模式（`ENABLE_JSON_MODE=true`）
 
 ### 不支持（忽略参数）
 
@@ -254,80 +293,58 @@ top_k = max(1, min(40, int(temperature * 20)))
 - 快速原型开发
 - 低成本的 LLM 接入
 - 对延迟不敏感的场景
-- 不需要工具调用的应用
+- 实验性场景（启用实验性功能）
 
 ❌ **不推荐**：
-- 需要原生工具调用的应用
-- 需要保证 JSON 输出的应用
-- 生产环境中关键业务逻辑
-- 需要高可靠性的场景
+- 需要保证可靠性的生产环境（使用实验性功能时）
+- 需要严格 JSON Schema 验证的应用
+- 复杂的多轮工具调用（使用实验性功能时）
 
 ### 迁移建议
 
 从 OpenAI 迁移时：
 
-1. **移除工具调用代码**：
-   ```python
-   # 替换这样
-   response = client.chat.completions.create(
-       model="gpt-4",
-       messages=messages,
-       tools=tools,  # ❌ 不支持
-   )
-   
-   # 改为这样
-   response = client.chat.completions.create(
-       model="llama3.1-8B",
-       messages=messages_with_tool_description,  # ✅ 在提示中描述工具
-   )
-   # 然后在应用层解析响应
-   ```
-
-2. **处理 JSON 输出**：
-   ```python
-   # 替换这样
-   response = client.chat.completions.create(
-       model="gpt-4",
-       messages=messages,
-       response_format={"type": "json_object"},  # ❌ 不支持
-   )
-   
-   # 改为这样
-   response = client.chat.completions.create(
-       model="llama3.1-8B",
-       messages=messages_with_json_instruction,  # ✅ 在提示中要求 JSON
-   )
-   # 然后在应用层解析和验证 JSON
-   ```
-
+1. **测试实验性功能**：在使用 `ENABLE_TOOLS` 或 `ENABLE_JSON_MODE` 前，充分测试可靠性
+2. **处理失败情况**：准备解析错误或无效输出的回退逻辑
 3. **调整温度**：可能需要重新调优 temperature 值
 4. **监控输入长度**：确保不超过 6K tokens
 
 ## 故障排查
 
-### 空响应问题
+### 工具调用失败
 
-**症状**：返回 200 但内容为空
+**症状**：模型不返回预期的 JSON 格式
 
-**原因**：输入超过 ~6,064 tokens
+**原因**：提示词工程限制，模型未遵循格式
 
-**解决**：截断或压缩输入文本
+**解决**：
+- 在系统提示中增加更多示例
+- 简化工具描述
+- 在后端添加输出验证和重试
 
-### 400 Bad Request - 不支持的功能
+### JSON 解析错误
 
-**症状**：请求返回 400 错误，提示功能不支持
+**症状**：设置了 JSON 模式但返回非 JSON
 
-**原因**：使用了 `tools`、`tool_choice` 或 `response_format` 参数
+**原因**：模型未遵循格式要求
 
-**解决**：从请求中移除这些参数，在应用层实现相应逻辑
+**解决**：
+- 始终使用 try/except 处理 JSON 解析
+- 准备回退逻辑
+- 使用更明确的提示
 
-### 502 Bad Gateway
+### 功能未启用错误
 
-**症状**：返回 502 错误
+**症状**：返回 400 错误，提示功能未启用
 
-**原因**：上游 chatjimmy.ai 服务不可用或网络问题
+**原因**：使用了实验性功能但未设置环境变量
 
-**解决**：检查代理设置，稍后重试
+**解决**：
+```bash
+export ENABLE_TOOLS=true
+# 或
+export ENABLE_JSON_MODE=true
+```
 
 ## 相关链接
 
