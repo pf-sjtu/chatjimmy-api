@@ -42,7 +42,7 @@ class TestEndToEndChatFlow:
             # Make the request
             response = integration_client.post(
                 "/v1/chat/completions",
-                headers={"Authorization": "Bearer sk-test-key"},
+                headers={"Authorization": "Bearer test-only-fake-key-for-testing"},
                 json={
                     "model": "llama3.1-8B",
                     "messages": [
@@ -96,7 +96,7 @@ class TestAPICompatibility:
             # Typical OpenAI SDK request format
             response = integration_client.post(
                 "/v1/chat/completions",
-                headers={"Authorization": "Bearer sk-test-key"},
+                headers={"Authorization": "Bearer test-only-fake-key-for-testing"},
                 json={
                     "model": "llama3.1-8B",
                     "messages": [
@@ -134,7 +134,7 @@ class TestAPICompatibility:
             
             response = integration_client.post(
                 "/v1/chat/completions",
-                headers={"Authorization": "Bearer sk-test-key"},
+                headers={"Authorization": "Bearer test-only-fake-key-for-testing"},
                 json={
                     "model": "llama3.1-8B",
                     "messages": [{"role": "user", "content": "Test"}]
@@ -184,7 +184,7 @@ class TestProxyIntegration:
                 # Make a request that triggers client creation
                 with patch("chatjimmy.server.get_settings") as mock_get_settings:
                     mock_settings = MagicMock()
-                    mock_settings.api_key = "sk-test-key"
+                    mock_settings.api_key = "test-only-fake-key-for-testing"
                     mock_settings.cors_origins = ["*"]
                     mock_settings.chatjimmy_base_url = "https://chatjimmy.ai"
                     mock_settings.chatjimmy_timeout = 30
@@ -238,7 +238,7 @@ class TestUnsupportedFeaturesRejection:
         
         response = integration_client.post(
             "/v1/chat/completions",
-            headers={"Authorization": "Bearer sk-test-key"},
+            headers={"Authorization": "Bearer test-only-fake-key-for-testing"},
             json=complex_tool_request
         )
         
@@ -274,7 +274,7 @@ class TestUnsupportedFeaturesRejection:
         
         response = integration_client.post(
             "/v1/chat/completions",
-            headers={"Authorization": "Bearer sk-test-key"},
+            headers={"Authorization": "Bearer test-only-fake-key-for-testing"},
             json=complex_schema_request
         )
         
@@ -297,7 +297,7 @@ class TestErrorPropagation:
             
             response = integration_client.post(
                 "/v1/chat/completions",
-                headers={"Authorization": "Bearer sk-test-key"},
+                headers={"Authorization": "Bearer test-only-fake-key-for-testing"},
                 json={
                     "model": "llama3.1-8B",
                     "messages": [{"role": "user", "content": "Hello"}]
@@ -319,7 +319,7 @@ class TestErrorPropagation:
             
             response = integration_client.post(
                 "/v1/chat/completions",
-                headers={"Authorization": "Bearer sk-test-key"},
+                headers={"Authorization": "Bearer test-only-fake-key-for-testing"},
                 json={
                     "model": "llama3.1-8B",
                     "messages": [{"role": "user", "content": "Hello"}]
@@ -344,7 +344,7 @@ class TestResponseConsistency:
             
             response = integration_client.post(
                 "/v1/chat/completions",
-                headers={"Authorization": "Bearer sk-test-key"},
+                headers={"Authorization": "Bearer test-only-fake-key-for-testing"},
                 json={
                     "model": "llama3.1-8B",
                     "messages": [{"role": "user", "content": "Test"}]
@@ -371,7 +371,7 @@ class TestResponseConsistency:
             before = int(time.time())
             response = integration_client.post(
                 "/v1/chat/completions",
-                headers={"Authorization": "Bearer sk-test-key"},
+                headers={"Authorization": "Bearer test-only-fake-key-for-testing"},
                 json={
                     "model": "llama3.1-8B",
                     "messages": [{"role": "user", "content": "Test"}]
@@ -394,7 +394,7 @@ class TestResponseConsistency:
             
             response = integration_client.post(
                 "/v1/chat/completions",
-                headers={"Authorization": "Bearer sk-test-key"},
+                headers={"Authorization": "Bearer test-only-fake-key-for-testing"},
                 json={
                     "model": "llama3.1-8B",
                     "messages": [{"role": "user", "content": "Test"}]

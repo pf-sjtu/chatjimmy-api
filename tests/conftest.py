@@ -8,7 +8,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 # Set test environment variables before importing app
-os.environ.setdefault("API_KEY", "sk-test-key")
+# Use a test-only key that is clearly not a real secret
+os.environ.setdefault("API_KEY", "test-only-fake-key-for-testing")
 os.environ.setdefault("CHATJIMMY_BASE_URL", "https://chatjimmy.ai")
 os.environ.setdefault("CHATJIMMY_TIMEOUT", "30")
 os.environ.setdefault("LOG_LEVEL", "debug")
@@ -18,7 +19,7 @@ os.environ.setdefault("LOG_LEVEL", "debug")
 def mock_env_vars():
     """Set up test environment variables."""
     env_vars = {
-        "API_KEY": "sk-test-key",
+        "API_KEY": "test-only-fake-key-for-testing",
         "CHATJIMMY_BASE_URL": "https://chatjimmy.ai",
         "CHATJIMMY_TIMEOUT": "30",
         "HTTP_PROXY": "http://localhost:10808",
@@ -154,6 +155,12 @@ def valid_chat_request_streaming():
         ],
         "stream": True,
     }
+
+
+@pytest.fixture
+def test_api_key():
+    """Return a test-only API key."""
+    return "test-only-fake-key-for-testing"
 
 
 @pytest.fixture(autouse=True)

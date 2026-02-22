@@ -81,7 +81,7 @@ class TestModelsEndpoint:
             
             response = test_client.get(
                 "/v1/models",
-                headers={"Authorization": "Bearer sk-test-key"}
+                headers={"Authorization": "Bearer test-only-fake-key-for-testing"}
             )
             
             assert response.status_code == 200
@@ -100,7 +100,7 @@ class TestModelsEndpoint:
             
             response = test_client.get(
                 "/v1/models",
-                headers={"Authorization": "Bearer sk-test-key"}
+                headers={"Authorization": "Bearer test-only-fake-key-for-testing"}
             )
             
             assert response.status_code == 200
@@ -128,7 +128,7 @@ class TestChatCompletionsEndpoint:
             
             response = test_client.post(
                 "/v1/chat/completions",
-                headers={"Authorization": "Bearer sk-test-key"},
+                headers={"Authorization": "Bearer test-only-fake-key-for-testing"},
                 json=valid_chat_request,
             )
             
@@ -147,7 +147,7 @@ class TestChatCompletionsEndpoint:
         """Test chat completion without API key when auth is required."""
         with patch("chatjimmy.config.get_settings") as mock_get_settings:
             mock_settings = MagicMock()
-            mock_settings.api_key = "sk-test-key"
+            mock_settings.api_key = "test-only-fake-key-for-testing"
             mock_settings.cors_origins = ["*"]
             mock_get_settings.return_value = mock_settings
             
@@ -179,7 +179,7 @@ class TestChatCompletionsEndpoint:
         
         response = test_client.post(
             "/v1/chat/completions",
-            headers={"Authorization": "Bearer sk-test-key"},
+            headers={"Authorization": "Bearer test-only-fake-key-for-testing"},
             json=request_data,
         )
         
@@ -204,7 +204,7 @@ class TestChatCompletionsEndpoint:
         
         response = test_client.post(
             "/v1/chat/completions",
-            headers={"Authorization": "Bearer sk-test-key"},
+            headers={"Authorization": "Bearer test-only-fake-key-for-testing"},
             json=request_data,
         )
         
@@ -221,7 +221,7 @@ class TestChatCompletionsEndpoint:
         
         response = test_client.post(
             "/v1/chat/completions",
-            headers={"Authorization": "Bearer sk-test-key"},
+            headers={"Authorization": "Bearer test-only-fake-key-for-testing"},
             json=request_data,
         )
         
@@ -241,7 +241,7 @@ class TestChatCompletionsEndpoint:
         
         response = test_client.post(
             "/v1/chat/completions",
-            headers={"Authorization": "Bearer sk-test-key"},
+            headers={"Authorization": "Bearer test-only-fake-key-for-testing"},
             json=request_data,
         )
         
@@ -256,7 +256,7 @@ class TestChatCompletionsEndpoint:
             
             response = test_client.post(
                 "/v1/chat/completions",
-                headers={"Authorization": "Bearer sk-test-key"},
+                headers={"Authorization": "Bearer test-only-fake-key-for-testing"},
                 json=valid_chat_request,
             )
             
@@ -288,7 +288,7 @@ class TestStreamingChatCompletions:
             
             response = test_client.post(
                 "/v1/chat/completions",
-                headers={"Authorization": "Bearer sk-test-key"},
+                headers={"Authorization": "Bearer test-only-fake-key-for-testing"},
                 json=valid_chat_request_streaming,
             )
             
@@ -331,7 +331,7 @@ class TestParameterMapping:
                 
                 test_client.post(
                     "/v1/chat/completions",
-                    headers={"Authorization": "Bearer sk-test-key"},
+                    headers={"Authorization": "Bearer test-only-fake-key-for-testing"},
                     json=request_data,
                 )
                 
@@ -357,7 +357,7 @@ class TestParameterMapping:
             
             test_client.post(
                 "/v1/chat/completions",
-                headers={"Authorization": "Bearer sk-test-key"},
+                headers={"Authorization": "Bearer test-only-fake-key-for-testing"},
                 json=request_data,
             )
             
@@ -384,7 +384,7 @@ class TestParameterMapping:
             
             test_client.post(
                 "/v1/chat/completions",
-                headers={"Authorization": "Bearer sk-test-key"},
+                headers={"Authorization": "Bearer test-only-fake-key-for-testing"},
                 json=request_data,
             )
             
@@ -422,7 +422,7 @@ class TestErrorHandling:
             mock_client.models.side_effect = Exception("Unexpected error")
             mock_get_client.return_value = mock_client
             
-            response = test_client.get("/v1/models", headers={"Authorization": "Bearer sk-test-key"})
+            response = test_client.get("/v1/models", headers={"Authorization": "Bearer test-only-fake-key-for-testing"})
             
             # Should not crash, should return 200 with fallback data
             assert response.status_code == 200
