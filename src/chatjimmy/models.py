@@ -56,8 +56,9 @@ class ChatMessage(BaseModel):
     role: Literal["system", "user", "assistant", "tool"] = Field(
         ..., description="The role of the message author"
     )
-    content: str | None = Field(
-        default=None, description="The content of the message"
+    content: str | list[dict[str, Any]] | None = Field(
+        default=None,
+        description="The content of the message (string or OpenAI-style content parts)",
     )
     name: str | None = Field(
         default=None, description="The name of the author (for tool messages)"
@@ -68,6 +69,25 @@ class ChatMessage(BaseModel):
     tool_call_id: str | None = Field(
         default=None, description="The ID of the tool call (for tool messages)"
     )
+
+    def content_as_text(self) -> str:
+        """Normalize message content to plain text for upstream chatjimmy API."""
+        if self.content is None:
+            return ""
+        if isinstance(self.content, str):
+            return self.content
+
+        # OpenAI-compatible content parts: keep only text parts.
+        text_parts: list[str] = []
+        for part in self.content:
+            if not isinstance(part, dict):
+                continue
+            if part.get("type") != "text":
+                continue
+            text = part.get("text")
+            if isinstance(text, str):
+                text_parts.append(text)
+        return "".join(text_parts)
 
 
 # ==================== Request Models ====================
@@ -225,13 +245,13 @@ class ChatCompletionRequest(BaseModel):
         """Extract system prompt from messages or return empty string."""
         for msg in self.messages:
             if msg.role == "system":
-                return msg.content or ""
+                return msg.content_as_text()
         return ""
 
     def get_chat_messages(self) -> list[dict]:
         """Get non-system messages for the chat API."""
         return [
-            {"role": msg.role, "content": msg.content or ""}
+            {"role": msg.role, "content": msg.content_as_text()}
             for msg in self.messages
             if msg.role != "system"
         ]
