@@ -4,7 +4,52 @@ __pycache__/
 build/
 dist/
 wheels/
-*.egg-info
+*.egg-info/
+*.egg
+*.so
+*.dylib
+*.pyd
 
 # Virtual environments
-.venv
+.venv/
+venv/
+ENV/
+env/
+.venv-*/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Build artifacts
+*.manifest
+*.spec
+pip-wheel-metadata/
+
+# Local development
+.env
+.env.local
+.env.*.local
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pytype/
+
+# Profiling
+*.prof

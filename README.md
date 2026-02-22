@@ -2,9 +2,31 @@
 
 Unofficial Python wrapper for the chatjimmy.ai API.
 
-chatjimmy.ai is a demo chatbot by Taalas, running Llama 3.1 8B on their custom HC1 silicon at ~17,000 tokens/sec per user.
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-https://chatjimmy.ai
+[chatjimmy.ai](https://chatjimmy.ai) is a demo chatbot by [Taalas](https://taalas.com), running **Llama 3.1 8B** on their custom HC1 silicon at ~17,000 tokens/sec per user.
+
+## Features
+
+- 🚀 Simple, intuitive API
+- 💬 Streaming and non-streaming chat
+- 📊 Detailed inference stats (tokens/sec, TTFT, latency)
+- 🏥 Health check and model listing
+- 📎 File attachment support
+- 🔒 No authentication required
+
+## Installation
+
+```bash
+pip install chatjimmy
+```
+
+Or with [uv](https://github.com/astral-sh/uv):
+
+```bash
+uv add chatjimmy
+```
 
 ## Quick Start
 
@@ -13,13 +35,14 @@ from chatjimmy import ChatJimmy
 
 client = ChatJimmy()
 
+# Simple question
 answer = client.ask("What is the capital of France?")
 print(answer)
 ```
 
 ## Usage
 
-### Simple question
+### Simple Question
 
 ```python
 from chatjimmy import ChatJimmy
@@ -28,7 +51,7 @@ client = ChatJimmy()
 print(client.ask("Explain quantum computing in one sentence."))
 ```
 
-### Chat with options
+### Chat with Options
 
 ```python
 from chatjimmy import ChatJimmy
@@ -46,16 +69,14 @@ print(f"Output tokens: {response.stats.decode_tokens}")
 print(f"Speed: {response.stats.decode_rate:.0f} tokens/sec")
 ```
 
-### Multi-turn conversation
+### Multi-turn Conversation
 
 ```python
 from chatjimmy import ChatJimmy
 
 client = ChatJimmy()
 
-messages = [
-    {"role": "user", "content": "My name is Mohamed."},
-]
+messages = [{"role": "user", "content": "My name is Mohamed."}]
 resp = client.chat(messages)
 print(resp.text)
 
@@ -79,7 +100,7 @@ for chunk in client.chat_stream(
 print()
 ```
 
-### Health check
+### Health Check
 
 ```python
 from chatjimmy import ChatJimmy
@@ -92,7 +113,7 @@ print(health.backend)       # "healthy"
 print(health.timestamp)     # ISO timestamp
 ```
 
-### List models
+### List Models
 
 ```python
 from chatjimmy import ChatJimmy
@@ -103,7 +124,7 @@ for model in client.models():
     print(f"{model.id} (by {model.owned_by})")
 ```
 
-### Using Message objects
+### Using Message Objects
 
 ```python
 from chatjimmy import ChatJimmy, Message
@@ -132,9 +153,9 @@ response = client.chat(
 print(response.text)
 ```
 
-### Response stats
+## Response Stats
 
-Every chat response includes inference stats from the Taalas HC1 hardware:
+Every chat response includes detailed inference stats from the Taalas HC1 hardware:
 
 ```python
 response = client.chat(messages=[{"role": "user", "content": "hi"}])
@@ -153,63 +174,50 @@ stats.done_reason       # "stop" (natural end)
 
 ## API Reference
 
-### ChatJimmy(base_url, timeout)
+### `ChatJimmy(base_url, timeout)`
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| base_url | str | `https://chatjimmy.ai` | API base URL |
-| timeout | int | 30 | Request timeout in seconds |
+| `base_url` | `str` | `https://chatjimmy.ai` | API base URL |
+| `timeout` | `int` | `30` | Request timeout in seconds |
 
-### client.ask(prompt, model, system_prompt, top_k)
+### Methods
 
-Single-turn convenience method. Returns the response text as a string.
+| Method | Description |
+|--------|-------------|
+| `ask(prompt, ...)` | Single-turn convenience method. Returns response text as string. |
+| `chat(messages, ...)` | Full chat method. Returns `ChatResponse` with `.text` and `.stats`. |
+| `chat_stream(messages, ...)` | Generator that yields text chunks as they arrive. |
+| `health()` | Returns `HealthStatus` with `.healthy` property. |
+| `models()` | Returns list of `Model` objects. |
 
-### client.chat(messages, model, system_prompt, top_k, attachment)
-
-Full chat method. Returns a `ChatResponse` with `.text` and `.stats`.
-
-### client.chat_stream(messages, model, system_prompt, top_k, attachment)
-
-Generator that yields text chunks as they arrive.
-
-### client.health()
-
-Returns a `HealthStatus` object with a `.healthy` property.
-
-### client.models()
-
-Returns a list of `Model` objects.
-
-### Chat parameters
+### Chat Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| messages | list | required | List of `{"role": ..., "content": ...}` dicts or `Message` objects |
-| model | str | `llama3.1-8B` | Model ID |
-| system_prompt | str | `""` | System prompt |
-| top_k | int | 8 | Top-K sampling parameter |
-| attachment | Attachment | None | File attachment |
+| `messages` | `list[dict \| Message]` | required | List of message dicts or `Message` objects |
+| `model` | `str` | `llama3.1-8B` | Model ID |
+| `system_prompt` | `str` | `""` | System prompt |
+| `top_k` | `int` | `8` | Top-K sampling parameter |
+| `attachment` | `Attachment` | `None` | File attachment |
 
-## Notes
+## Known Limitations
 
-- No authentication required
-- No rate limiting observed (tested 20 concurrent + 30 sequential bursts)
-- Single model available: llama3.1-8B on Taalas HC1 silicon
+- **Input limit**: ~6,064 prefill tokens. Requests exceeding this return an empty 200 response with no error.
+- **Output**: No hard cap. Model stops naturally via EOS token (~1,200-2,400 tokens typical).
+- **Model**: Only `llama3.1-8B` is available.
 
-## Known Limits
-
-- Input: ~6,064 prefill tokens. Requests exceeding this return an empty 200 response with no error
-- Output: no hard cap. Model stops naturally via EOS token (~1,200-2,400 tokens typical)
-
-## How We Know It's Taalas
+## About Taalas
 
 The connection to Taalas was found in two places inside chatjimmy.ai itself:
 
-1. The main JS bundle (`8642-*.js`) contains footer links to `https://taalas.com/terms-conditions` and `https://taalas.com/privacy-policy` in the chat disclaimer text.
+1. The main JS bundle contains footer links to `https://taalas.com/terms-conditions` and `https://taalas.com/privacy-policy`.
 2. The `/api/models` endpoint returns `"owned_by": "Taalas Inc."` in the model metadata.
-
-No other references to Taalas appear anywhere in the HTML or JS bundles.
 
 ## Disclaimer
 
-This is an unofficial wrapper. chatjimmy.ai is a public demo by Taalas (https://taalas.com). The API has no authentication and could change or go offline at any time.
+This is an **unofficial** wrapper. [chatjimmy.ai](https://chatjimmy.ai) is a public demo by [Taalas](https://taalas.com). The API has no authentication and could change or go offline at any time.
+
+## License
+
+MIT License - see [LICENSE](LICENSE) file for details.
