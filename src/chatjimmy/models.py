@@ -6,7 +6,7 @@ import time
 import uuid
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_validator, ValidationInfo
 
 
 # ==================== Tool Use / Function Calling Models ====================
@@ -86,6 +86,8 @@ class ResponseFormat(BaseModel):
 class ChatCompletionRequest(BaseModel):
     """Request body for chat completion endpoint."""
 
+    model_config = {"extra": "allow"}  # Allow extra fields for feature flags
+
     model: str = Field(
         default="llama3.1-8B", description="ID of the model to use"
     )
@@ -124,22 +126,17 @@ class ChatCompletionRequest(BaseModel):
     user: str | None = Field(
         default=None, description="A unique identifier for the end-user"
     )
-    
-    # Feature flags (injected by validator)
-    _enable_tools: bool = False
-    _enable_json_mode: bool = False
-
-    def model_post_init(self, __context: Any) -> None:
-        """Initialize feature flags from context if available."""
-        if __context and hasattr(__context, 'get'):
-            self._enable_tools = __context.get('enable_tools', False)
-            self._enable_json_mode = __context.get('enable_json_mode', False)
 
     @model_validator(mode="after")
-    def validate_unsupported_features(self) -> "ChatCompletionRequest":
+    def validate_unsupported_features(self, info: ValidationInfo) -> "ChatCompletionRequest":
         """Validate that unsupported features are not used when disabled."""
+        # Get feature flags from context or extra fields
+        context = info.context or {}
+        enable_tools = context.get('enable_tools', False)
+        enable_json_mode = context.get('enable_json_mode', False)
+        
         # Check tools - only validate if feature is disabled
-        if not self._enable_tools:
+        if not enable_tools:
             if self.tools is not None:
                 raise ValueError(
                     "Tool use (tools parameter) is not enabled. "
@@ -153,7 +150,7 @@ class ChatCompletionRequest(BaseModel):
                 )
         
         # Check JSON mode - only validate if feature is disabled
-        if not self._enable_json_mode:
+        if not enable_json_mode:
             if self.response_format is not None and self.response_format.type != "text":
                 raise ValueError(
                     "JSON mode / Structured outputs (response_format parameter) are not enabled. "
@@ -163,22 +160,7 @@ class ChatCompletionRequest(BaseModel):
         
         return self
 
-    def get_system_prompt(self) -> str:
-        """Extract system prompt from messages or return empty string."""
-        for msg in self.messages:
-            if msg.role == "system":
-                return msg.content or ""
-        return ""
-
-    def get_chat_messages(self) -> list[dict]:
-        """Get non-system messages for the chat API."""
-        return [
-            {"role": msg.role, "content": msg.content or ""}
-            for msg in self.messages
-            if msg.role != "system"
-        ]
-
-    def build_system_prompt(self) -> str:
+    def build_system_prompt(self, enable_tools: bool = False, enable_json_mode: bool = False) -> str:
         """Build system prompt for the chat API.
         
         When experimental features are enabled, includes prompt engineering instructions.
@@ -187,12 +169,12 @@ class ChatCompletionRequest(BaseModel):
         parts = [base_prompt] if base_prompt else []
 
         # Add tool instructions if enabled and tools are provided
-        if self._enable_tools and self.tools:
+        if enable_tools and self.tools:
             tool_instructions = self._build_tool_instructions()
             parts.append(tool_instructions)
 
         # Add JSON schema instructions if enabled and requested
-        if self._enable_json_mode and self.response_format and self.response_format.type != "text":
+        if enable_json_mode and self.response_format and self.response_format.type != "text":
             json_instructions = self._build_json_instructions()
             parts.append(json_instructions)
 
@@ -238,6 +220,21 @@ class ChatCompletionRequest(BaseModel):
         lines.append("\nDo not include any text outside the JSON object.")
 
         return "\n".join(lines)
+
+    def get_system_prompt(self) -> str:
+        """Extract system prompt from messages or return empty string."""
+        for msg in self.messages:
+            if msg.role == "system":
+                return msg.content or ""
+        return ""
+
+    def get_chat_messages(self) -> list[dict]:
+        """Get non-system messages for the chat API."""
+        return [
+            {"role": msg.role, "content": msg.content or ""}
+            for msg in self.messages
+            if msg.role != "system"
+        ]
 
 
 # ==================== Response Models ====================

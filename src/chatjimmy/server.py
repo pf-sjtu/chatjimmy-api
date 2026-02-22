@@ -259,12 +259,13 @@ def create_chat_completion_response(
     request: ChatCompletionRequest,
     text: str,
     stats: Stats | None,
+    enable_tools: bool = False,
 ) -> ChatCompletionResponse:
     """Create a chat completion response."""
     usage = convert_stats_to_usage(stats)
     
     # Check if response contains tool calls (only when tools are enabled)
-    content, tool_calls = parse_tool_calls_from_response(text) if request._enable_tools else (text, None)
+    content, tool_calls = parse_tool_calls_from_response(text) if enable_tools else (text, None)
     
     # Determine finish reason
     finish_reason = "stop"
@@ -294,12 +295,17 @@ def create_chat_completion_response(
 
 async def stream_chat_completion(
     request: ChatCompletionRequest,
+    enable_tools: bool = False,
+    enable_json_mode: bool = False,
 ) -> AsyncGenerator[str, None]:
     """Stream chat completion response."""
     client = get_chatjimmy_client()
     
     # Get system prompt with optional prompt engineering for enabled features
-    system_prompt = request.build_system_prompt()
+    system_prompt = request.build_system_prompt(
+        enable_tools=enable_tools,
+        enable_json_mode=enable_json_mode,
+    )
     
     # Map parameters
     top_k = map_temperature_to_top_k(request.temperature, request.top_k)
@@ -397,20 +403,26 @@ async def create_chat_completion(
     settings = get_settings()
     
     try:
-        # Inject feature flags into request validation context
-        request_data_with_context = request_data.copy()
-        request_data_with_context['_enable_tools'] = settings.enable_tools
-        request_data_with_context['_enable_json_mode'] = settings.enable_json_mode
+        # Create validation context with feature flags
+        validation_context = {
+            'enable_tools': settings.enable_tools,
+            'enable_json_mode': settings.enable_json_mode,
+        }
         
-        # Validate and create request object
-        request = ChatCompletionRequest.model_validate(request_data_with_context)
-        request._enable_tools = settings.enable_tools
-        request._enable_json_mode = settings.enable_json_mode
+        # Validate and create request object with context
+        request = ChatCompletionRequest.model_validate(
+            request_data,
+            context=validation_context,
+        )
         
         if request.stream:
             # Return streaming response
             return StreamingResponse(
-                stream_chat_completion(request),
+                stream_chat_completion(
+                    request,
+                    enable_tools=settings.enable_tools,
+                    enable_json_mode=settings.enable_json_mode,
+                ),
                 media_type="text/event-stream",
             )
         else:
@@ -418,7 +430,10 @@ async def create_chat_completion(
             client = get_chatjimmy_client()
             
             # Get system prompt with optional prompt engineering for enabled features
-            system_prompt = request.build_system_prompt()
+            system_prompt = request.build_system_prompt(
+                enable_tools=settings.enable_tools,
+                enable_json_mode=settings.enable_json_mode,
+            )
             
             # Map parameters
             top_k = map_temperature_to_top_k(request.temperature, request.top_k)
@@ -437,6 +452,7 @@ async def create_chat_completion(
                 request=request,
                 text=response.text,
                 stats=response.stats,
+                enable_tools=settings.enable_tools,
             )
     
     except HTTPException:
