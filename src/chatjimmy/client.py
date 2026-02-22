@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import dataclass, field
 from typing import Generator
@@ -13,6 +14,20 @@ import requests
 BASE_URL = "https://chatjimmy.ai"
 
 _STATS_RE = re.compile(r"<\|stats\|>([\s\S]+?)<\|/stats\|>$")
+
+
+def get_proxy_config() -> dict[str, str] | None:
+    """Get proxy configuration from environment variables."""
+    proxies = {}
+    http_proxy = os.environ.get("HTTP_PROXY") or os.environ.get("http_proxy")
+    https_proxy = os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy")
+    
+    if http_proxy:
+        proxies["http"] = http_proxy
+    if https_proxy:
+        proxies["https"] = https_proxy
+    
+    return proxies if proxies else None
 
 
 @dataclass
@@ -89,17 +104,29 @@ class Attachment:
 class ChatJimmy:
     """Client for the chatjimmy.ai API."""
 
-    def __init__(self, base_url: str = BASE_URL, timeout: int = 30):
+    def __init__(
+        self,
+        base_url: str = BASE_URL,
+        timeout: int = 30,
+        proxies: dict[str, str] | None = None,
+    ):
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
+        self.proxies = proxies or get_proxy_config()
         self.session = requests.Session()
         self.session.headers.update(
             {"User-Agent": "chatjimmy-python/1.0", "Content-Type": "application/json"}
         )
+        if self.proxies:
+            self.session.proxies.update(self.proxies)
 
     def health(self) -> HealthStatus:
         """Check server health."""
-        r = self.session.get(f"{self.base_url}/api/health", timeout=self.timeout)
+        r = self.session.get(
+            f"{self.base_url}/api/health",
+            timeout=self.timeout,
+            proxies=self.proxies,
+        )
         r.raise_for_status()
         d = r.json()
         return HealthStatus(
@@ -113,7 +140,11 @@ class ChatJimmy:
 
     def models(self) -> list[Model]:
         """List available models."""
-        r = self.session.get(f"{self.base_url}/api/models", timeout=self.timeout)
+        r = self.session.get(
+            f"{self.base_url}/api/models",
+            timeout=self.timeout,
+            proxies=self.proxies,
+        )
         r.raise_for_status()
         data = r.json().get("data", [])
         return [
@@ -191,6 +222,7 @@ class ChatJimmy:
             json=body,
             stream=True,
             timeout=self.timeout,
+            proxies=self.proxies,
         )
         r.raise_for_status()
 

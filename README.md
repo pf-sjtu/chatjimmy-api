@@ -5,6 +5,7 @@ Unofficial Python wrapper for the chatjimmy.ai API with OpenAI-compatible server
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688.svg?logo=fastapi)](https://fastapi.tiangolo.com)
+[![Tests](https://img.shields.io/badge/tests-80%25%2B-brightgreen.svg)](./tests)
 
 [chatjimmy.ai](https://chatjimmy.ai) is a demo chatbot by [Taalas](https://taalas.com), running **Llama 3.1 8B** on their custom HC1 silicon at ~17,000 tokens/sec per user.
 
@@ -22,6 +23,7 @@ This project provides both a **Python client library** and an **OpenAI-compatibl
 - [Deployment](#deployment)
 - [Configuration](#configuration)
 - [Limitations](#limitations)
+- [Testing](#testing)
 - [Documentation](#documentation)
 
 ---
@@ -32,14 +34,14 @@ This project provides both a **Python client library** and an **OpenAI-compatibl
 - 🚀 Simple, intuitive API
 - 💬 Streaming and non-streaming chat
 - 📊 Detailed inference stats (tokens/sec, TTFT, latency)
+- 🌐 HTTP/HTTPS proxy support via environment variables
 
 ### API Server
 - 🔌 **OpenAI-compatible endpoints** (`/v1/chat/completions`, `/v1/models`)
-- 🔧 **Tool Use / Function Calling** (via prompt engineering)
-- 📋 **JSON Mode / Structured Outputs** (via prompt engineering)
 - 🔑 **API Key authentication**
 - 🌐 **CORS support**
 - 📡 **Streaming responses** (simulated)
+- 🌐 **Proxy configuration** via environment variables
 - 🚀 **Ready for Render deployment**
 
 ---
@@ -64,6 +66,12 @@ Or with [uv](https://github.com/astral-sh/uv):
 uv add chatjimmy --extra server
 ```
 
+### Development (with tests)
+
+```bash
+pip install "chatjimmy[dev]"
+```
+
 ---
 
 ## Client Library Usage
@@ -75,6 +83,22 @@ from chatjimmy import ChatJimmy
 
 client = ChatJimmy()
 print(client.ask("Explain quantum computing in one sentence."))
+```
+
+### Using Proxy
+
+```python
+from chatjimmy import ChatJimmy
+
+# Proxy is automatically loaded from HTTP_PROXY/HTTPS_PROXY environment variables
+# Or pass explicitly:
+client = ChatJimmy(
+    proxies={
+        "http": "http://proxy.example.com:8080",
+        "https": "http://proxy.example.com:8080",
+    }
+)
+print(client.ask("Hello!"))
 ```
 
 ### Chat with Options
@@ -121,6 +145,10 @@ pip install "chatjimmy[server]"
 
 # Set API key
 export API_KEY="your-secret-api-key"
+
+# Configure proxy (if needed)
+export HTTP_PROXY="http://proxy.example.com:8080"
+export HTTPS_PROXY="http://proxy.example.com:8080"
 
 # Start server
 python -m chatjimmy
@@ -215,96 +243,6 @@ curl https://your-api.onrender.com/v1/chat/completions \
 
 ---
 
-## Advanced Features
-
-### Tool Use / Function Calling
-
-> ⚠️ Tool use is simulated via prompt engineering. See [API Limitations](docs/api-limitations.md) for details.
-
-```python
-from openai import OpenAI
-
-client = OpenAI(
-    base_url="https://your-api.onrender.com/v1",
-    api_key="your-api-key",
-)
-
-tools = [
-    {
-        "type": "function",
-        "function": {
-            "name": "get_weather",
-            "description": "Get current weather for a location",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "location": {"type": "string"}
-                },
-                "required": ["location"]
-            }
-        }
-    }
-]
-
-response = client.chat.completions.create(
-    model="llama3.1-8B",
-    messages=[{"role": "user", "content": "What's the weather in Paris?"}],
-    tools=tools,
-    tool_choice="auto",
-)
-
-# Check if model wants to call a tool
-if response.choices[0].finish_reason == "tool_calls":
-    tool_call = response.choices[0].message.tool_calls[0]
-    print(f"Tool: {tool_call.function.name}")
-    print(f"Arguments: {tool_call.function.arguments}")
-```
-
-### JSON Mode
-
-> ⚠️ JSON mode is simulated via prompt engineering. See [API Limitations](docs/api-limitations.md) for details.
-
-```python
-response = client.chat.completions.create(
-    model="llama3.1-8B",
-    messages=[{
-        "role": "user",
-        "content": "List 3 planets in our solar system"
-    }],
-    response_format={"type": "json_object"},
-)
-
-import json
-data = json.loads(response.choices[0].message.content)
-print(data)
-```
-
-### JSON Schema
-
-```python
-response = client.chat.completions.create(
-    model="llama3.1-8B",
-    messages=[{
-        "role": "user",
-        "content": "Generate a user profile"
-    }],
-    response_format={
-        "type": "json_object",
-        "json_schema": {
-            "type": "object",
-            "properties": {
-                "name": {"type": "string"},
-                "age": {"type": "integer"},
-                "email": {"type": "string"}
-            },
-            "required": ["name", "age"]
-        }
-    },
-)
-```
-
----
-
 ## Deployment
 
 ### Deploy to Render (Recommended)
@@ -318,6 +256,7 @@ response = client.chat.completions.create(
 3. Connect your forked repository
 4. Set environment variables:
    - `API_KEY`: Your secret API key
+   - `HTTP_PROXY` / `HTTPS_PROXY`: (Optional) Proxy settings
 5. Deploy!
 
 See [docs/deployment.md](docs/deployment.md) for detailed instructions.
@@ -328,8 +267,12 @@ See [docs/deployment.md](docs/deployment.md) for detailed instructions.
 # Build
 docker build -t chatjimmy-api .
 
-# Run
-docker run -p 8000:8000 -e API_KEY=your-key chatjimmy-api
+# Run with proxy
+docker run -p 8000:8000 \
+  -e API_KEY=your-key \
+  -e HTTP_PROXY=http://proxy:8080 \
+  -e HTTPS_PROXY=http://proxy:8080 \
+  chatjimmy-api
 ```
 
 ### Local Development
@@ -340,7 +283,7 @@ git clone https://github.com/pf-sjtu/chatjimmy-api.git
 cd chatjimmy-api
 
 # Install
-pip install -e ".[server]"
+pip install -e ".[dev]"
 
 # Configure
 cp .env.example .env
@@ -363,15 +306,30 @@ API_KEY=your-secret-api-key
 CHATJIMMY_TIMEOUT=30
 LOG_LEVEL=info
 ALLOWED_ORIGINS=https://your-frontend.com
+
+# Proxy settings (if needed)
+HTTP_PROXY=http://proxy.example.com:8080
+HTTPS_PROXY=http://proxy.example.com:8080
 ```
 
 ### Proxy Settings
 
-If you need to use a proxy to access chatjimmy.ai:
+Proxy configuration is automatically loaded from environment variables:
 
-```env
-HTTP_PROXY=http://proxy.example.com:8080
-HTTPS_PROXY=http://proxy.example.com:8080
+```bash
+export HTTP_PROXY=http://proxy.example.com:8080
+export HTTPS_PROXY=http://proxy.example.com:8080
+```
+
+Or in Python:
+
+```python
+from chatjimmy import ChatJimmy
+
+client = ChatJimmy(proxies={
+    "http": "http://proxy.example.com:8080",
+    "https": "http://proxy.example.com:8080",
+})
 ```
 
 ---
@@ -386,15 +344,104 @@ This API is a compatibility layer over chatjimmy.ai, which has some inherent lim
 - **Context Length**: ~6,064 tokens maximum input
 - **No Multi-modal**: Text only, no image/audio support
 
-### API Limitations
+### ⚠️ Unsupported Features (Return 400 Error)
 
-- **Simulated Streaming**: chatjimmy.ai doesn't truly stream; we simulate it
-- **Tool Use**: Simulated via prompt engineering, not native
-- **JSON Mode**: Simulated via prompt engineering, no schema validation
-- **No logprobs**: Not supported by upstream API
+The following OpenAI API features are **explicitly disabled** and will return a 400 error:
+
+| Feature | Status | Reason |
+|---------|--------|--------|
+| `tools` | ❌ **Disabled** | chatjimmy.ai does not support native tool calling |
+| `tool_choice` | ❌ **Disabled** | chatjimmy.ai does not support native tool calling |
+| `response_format` (json_object/json_schema) | ❌ **Disabled** | chatjimmy.ai does not guarantee valid JSON output |
+
+**Why these are disabled:**
+
+These features were previously simulated via prompt engineering, but this approach:
+1. Does not comply with OpenAI API standards (no guaranteed behavior)
+2. Produces unreliable results (model may not follow instructions)
+3. Creates a false sense of compatibility
+
+**Alternative approaches:**
+
+Instead of using `tools`, implement tool calling in your application:
+
+```python
+# Don't do this:
+response = client.chat.completions.create(
+    model="llama3.1-8B",
+    messages=messages,
+    tools=tools,  # ❌ Will return 400 error
+)
+
+# Do this instead:
+response = client.chat.completions.create(
+    model="llama3.1-8B",
+    messages=messages_with_tool_descriptions,
+)
+# Parse response and handle tool calls in your code
+```
+
+Instead of using `response_format`, parse JSON manually:
+
+```python
+# Don't do this:
+response = client.chat.completions.create(
+    model="llama3.1-8B",
+    messages=messages,
+    response_format={"type": "json_object"},  # ❌ Will return 400 error
+)
+
+# Do this instead:
+response = client.chat.completions.create(
+    model="llama3.1-8B",
+    messages=messages_with_json_instructions,
+)
+import json
+data = json.loads(response.choices[0].message.content)
+```
+
+### Other Limitations
+
+- **Streaming**: Simulated (not true SSE), full response buffered then chunked
 - **Temperature**: Mapped to `top_k`, not true temperature sampling
+- **max_tokens**: Cannot be enforced
+- **stop sequences**: Not supported
+- **logprobs**: Not supported
 
 For complete details, see [docs/api-limitations.md](docs/api-limitations.md).
+
+---
+
+## Testing
+
+Run the test suite:
+
+```bash
+# Run all tests
+pytest
+
+# Run with coverage
+pytest --cov=chatjimmy --cov-report=term-missing
+
+# Run with coverage report
+pytest --cov=chatjimmy --cov-report=html
+open htmlcov/index.html
+
+# Run specific test files
+pytest tests/test_client.py
+pytest tests/test_server.py
+pytest tests/test_models.py
+
+# Run with verbose output
+pytest -v
+```
+
+The test suite achieves **80%+ coverage** with:
+- Unit tests for all client functionality
+- Unit tests for all server endpoints
+- Integration tests for complete flows
+- Proxy configuration tests
+- Error handling tests
 
 ---
 
@@ -411,18 +458,27 @@ For complete details, see [docs/api-limitations.md](docs/api-limitations.md).
 chatjimmy-api/
 ├── src/chatjimmy/
 │   ├── __init__.py          # Package exports
-│   ├── client.py            # Original client library
-│   ├── server.py            # FastAPI server (NEW)
-│   ├── models.py            # Pydantic models (NEW)
-│   ├── config.py            # Configuration (NEW)
-│   └── __main__.py          # CLI entry point (NEW)
+│   ├── client.py            # Client library with proxy support
+│   ├── server.py            # FastAPI server
+│   ├── models.py            # Pydantic models (with unsupported feature validation)
+│   ├── config.py            # Environment configuration
+│   └── __main__.py          # CLI entry point
+├── tests/
+│   ├── __init__.py
+│   ├── conftest.py          # Test fixtures
+│   ├── test_client.py       # Client library tests
+│   ├── test_server.py       # API endpoint tests
+│   ├── test_models.py       # Model validation tests
+│   ├── test_config.py       # Configuration tests
+│   └── test_integration.py  # Integration tests
 ├── docs/
-│   ├── api-limitations.md   # API limitations documentation
+│   ├── api-limitations.md   # API compatibility & limitations
 │   └── deployment.md        # Deployment guide
-├── render.yaml              # Render deployment config
+├── render.yaml              # Render deployment configuration
 ├── .env.example             # Environment variables template
 ├── pyproject.toml           # Project configuration
-└── README.md                # This file
+├── README.md                # This file
+└── AGENTS.md                # Agent documentation
 ```
 
 ---

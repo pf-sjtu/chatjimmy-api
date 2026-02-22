@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -13,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from chatjimmy.client import ChatJimmy, Stats
+from chatjimmy.client import ChatJimmy, Stats, get_proxy_config
 from chatjimmy.config import get_settings
 from chatjimmy.models import (
     ChatCompletionRequest,
@@ -28,8 +29,6 @@ from chatjimmy.models import (
     ModelInfo,
     ModelList,
     StreamingChoice,
-    ToolCall,
-    ToolCallFunction,
     Usage,
 )
 
@@ -52,9 +51,12 @@ def get_chatjimmy_client() -> ChatJimmy:
     global _chatjimmy_client
     if _chatjimmy_client is None:
         settings = get_settings()
+        # Use proxy configuration from environment if available
+        proxies = settings.proxies or get_proxy_config()
         _chatjimmy_client = ChatJimmy(
             base_url=settings.chatjimmy_base_url,
             timeout=settings.chatjimmy_timeout,
+            proxies=proxies,
         )
     return _chatjimmy_client
 
@@ -65,6 +67,8 @@ async def lifespan(app: FastAPI):
     # Startup
     settings = get_settings()
     logger.info(f"Starting server with base URL: {settings.chatjimmy_base_url}")
+    if settings.proxies or get_proxy_config():
+        logger.info("Proxy configuration detected")
     yield
     # Shutdown
     logger.info("Shutting down server")
@@ -73,7 +77,8 @@ async def lifespan(app: FastAPI):
 # Create FastAPI app
 app = FastAPI(
     title="ChatJimmy OpenAI Compatible API",
-    description="OpenAI-compatible API wrapper for chatjimmy.ai (Taalas HC1 inference)",
+    description="OpenAI-compatible API wrapper for chatjimmy.ai (Taalas HC1 inference). "
+                "NOTE: Tool use and JSON mode are NOT supported by the underlying API.",
     version="0.1.0",
     lifespan=lifespan,
 )
@@ -167,9 +172,9 @@ async def list_models(api_key: str = Depends(verify_api_key)):
             data=[
                 ModelInfo(
                     id=m.id,
-                    object="model",
-                    created=m.created,
-                    owned_by=m.owned_by,
+                    object=m.get("object", "model"),
+                    created=m.get("created", 0),
+                    owned_by=m.get("owned_by", ""),
                 )
                 for m in models
             ]
@@ -212,34 +217,6 @@ def map_temperature_to_top_k(temperature: float | None, top_k: int | None) -> in
     return max(1, min(40, int(temperature * 20)))
 
 
-def parse_tool_calls_from_response(text: str) -> tuple[str, list[ToolCall] | None]:
-    """Attempt to parse tool calls from response text.
-    
-    This is a best-effort implementation for prompt-engineered tool use.
-    """
-    # Try to find JSON tool call in the response
-    try:
-        # Look for patterns like {"tool": "name", "arguments": {...}}
-        text = text.strip()
-        if text.startswith("{") and text.endswith("}"):
-            data = json.loads(text)
-            if "tool" in data and "arguments" in data:
-                tool_name = data["tool"]
-                arguments = json.dumps(data["arguments"])
-                return "", [
-                    ToolCall(
-                        function=ToolCallFunction(
-                            name=tool_name,
-                            arguments=arguments,
-                        )
-                    )
-                ]
-    except (json.JSONDecodeError, TypeError):
-        pass
-    
-    return text, None
-
-
 def create_chat_completion_response(
     request: ChatCompletionRequest,
     text: str,
@@ -248,20 +225,15 @@ def create_chat_completion_response(
     """Create a chat completion response."""
     usage = convert_stats_to_usage(stats)
     
-    # Check if response contains tool calls (prompt-engineered)
-    content, tool_calls = parse_tool_calls_from_response(text)
-    
     # Determine finish reason
     finish_reason = "stop"
-    if tool_calls:
-        finish_reason = "tool_calls"
-    elif stats and stats.done_reason == "length":
+    if stats and stats.done_reason == "length":
         finish_reason = "length"
     
     message = ChoiceMessage(
         role="assistant",
-        content=content if content else None,
-        tool_calls=tool_calls,
+        content=text if text else None,
+        tool_calls=None,  # Tool calls are not supported
     )
     
     return ChatCompletionResponse(
@@ -283,8 +255,8 @@ async def stream_chat_completion(
     """Stream chat completion response."""
     client = get_chatjimmy_client()
     
-    # Get enhanced system prompt with tool/JSON instructions
-    system_prompt = request.build_enhanced_system_prompt()
+    # Get system prompt (no prompt engineering for unsupported features)
+    system_prompt = request.build_system_prompt()
     
     # Map parameters
     top_k = map_temperature_to_top_k(request.temperature, request.top_k)
@@ -390,8 +362,8 @@ async def create_chat_completion(
             # Return non-streaming response
             client = get_chatjimmy_client()
             
-            # Get enhanced system prompt with tool/JSON instructions
-            system_prompt = request.build_enhanced_system_prompt()
+            # Get system prompt (no prompt engineering for unsupported features)
+            system_prompt = request.build_system_prompt()
             
             # Map parameters
             top_k = map_temperature_to_top_k(request.temperature, request.top_k)
@@ -414,16 +386,19 @@ async def create_chat_completion(
     
     except HTTPException:
         raise
+    except ValueError as e:
+        # Handle validation errors (e.g., unsupported features)
+        logger.warning(f"Validation error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
     except Exception as e:
         logger.exception("Chat completion failed")
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Upstream API error: {str(e)}",
         )
-
-
-# Import asyncio for streaming delay
-import asyncio
 
 
 if __name__ == "__main__":
