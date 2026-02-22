@@ -36,9 +36,11 @@
 |--------|-----|
 | Name | chatjimmy-api（或你喜欢的名称） |
 | Runtime | Python 3 |
-| Build Command | `pip install -e ".[server]"` |
+| Build Command | `uv sync --frozen --extra server` 或 `pip install -e ".[server]"` |
 | Start Command | `uvicorn chatjimmy.server:app --host 0.0.0.0 --port $PORT` |
 | Health Check Path | `/health` |
+
+> **注意**: 如果仓库包含 `uv.lock` 文件，Render 会默认使用 `uv`。此时必须使用 `uv sync --frozen --extra server` 来安装 server 依赖（fastapi, uvicorn）。使用 `pip install` 会导致依赖安装不完整。
 
 5. 添加环境变量（见下方）
 6. 点击 **Create Web Service**
@@ -52,8 +54,12 @@
 | `API_KEY` | ✅ | - | 访问 API 所需的密钥 |
 | `CHATJIMMY_BASE_URL` | ❌ | https://chatjimmy.ai | chatjimmy API 地址 |
 | `CHATJIMMY_TIMEOUT` | ❌ | 30 | 请求超时时间（秒） |
+| `ENABLE_TOOLS` | ❌ | false | 启用实验性 Tool Use 功能 |
+| `ENABLE_JSON_MODE` | ❌ | false | 启用实验性 JSON Mode 功能 |
 | `LOG_LEVEL` | ❌ | info | 日志级别 |
 | `ALLOWED_ORIGINS` | ❌ | * | CORS 允许的域名 |
+| `HTTP_PROXY` | ❌ | - | HTTP 代理地址 |
+| `HTTPS_PROXY` | ❌ | - | HTTPS 代理地址 |
 
 #### 生成 API Key
 
@@ -298,6 +304,10 @@ python -m chatjimmy  # 查看控制台输出
 1. **ImportError**: 确保安装了 `[server]` 额外依赖
 2. **API_KEY 未设置**: 检查环境变量配置
 3. **端口冲突**: 确保端口未被占用
+4. **`uvicorn: command not found` (Render)**:
+   - 如果使用 uv（仓库有 `uv.lock` 文件），确保 Build Command 是 `uv sync --frozen --extra server`
+   - 不要只使用 `uv sync --frozen`，这会跳过 server 依赖安装
+   - 检查 `pyproject.toml` 中 `[project.optional-dependencies]` 包含 `server` 组
 
 ### 请求失败
 
