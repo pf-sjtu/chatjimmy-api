@@ -1,46 +1,72 @@
 # chatjimmy
 
-Unofficial Python wrapper for the chatjimmy.ai API.
+Unofficial Python wrapper for the chatjimmy.ai API with OpenAI-compatible server.
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![FastAPI](https://img.shields.io/badge/FastAPI-009688.svg?logo=fastapi)](https://fastapi.tiangolo.com)
 
 [chatjimmy.ai](https://chatjimmy.ai) is a demo chatbot by [Taalas](https://taalas.com), running **Llama 3.1 8B** on their custom HC1 silicon at ~17,000 tokens/sec per user.
 
+This project provides both a **Python client library** and an **OpenAI-compatible API server** that can be deployed to Render or other platforms.
+
+---
+
+## Table of Contents
+
+- [Features](#features)
+- [Installation](#installation)
+- [Client Library Usage](#client-library-usage)
+- [API Server](#api-server)
+- [OpenAI SDK Compatibility](#openai-sdk-compatibility)
+- [Deployment](#deployment)
+- [Configuration](#configuration)
+- [Limitations](#limitations)
+- [Documentation](#documentation)
+
+---
+
 ## Features
 
+### Client Library
 - 🚀 Simple, intuitive API
 - 💬 Streaming and non-streaming chat
 - 📊 Detailed inference stats (tokens/sec, TTFT, latency)
-- 🏥 Health check and model listing
-- 📎 File attachment support
-- 🔒 No authentication required
+
+### API Server
+- 🔌 **OpenAI-compatible endpoints** (`/v1/chat/completions`, `/v1/models`)
+- 🔧 **Tool Use / Function Calling** (via prompt engineering)
+- 📋 **JSON Mode / Structured Outputs** (via prompt engineering)
+- 🔑 **API Key authentication**
+- 🌐 **CORS support**
+- 📡 **Streaming responses** (simulated)
+- 🚀 **Ready for Render deployment**
+
+---
 
 ## Installation
+
+### Client Library Only
 
 ```bash
 pip install chatjimmy
 ```
 
+### With Server Support
+
+```bash
+pip install "chatjimmy[server]"
+```
+
 Or with [uv](https://github.com/astral-sh/uv):
 
 ```bash
-uv add chatjimmy
+uv add chatjimmy --extra server
 ```
 
-## Quick Start
+---
 
-```python
-from chatjimmy import ChatJimmy
-
-client = ChatJimmy()
-
-# Simple question
-answer = client.ask("What is the capital of France?")
-print(answer)
-```
-
-## Usage
+## Client Library Usage
 
 ### Simple Question
 
@@ -69,23 +95,6 @@ print(f"Output tokens: {response.stats.decode_tokens}")
 print(f"Speed: {response.stats.decode_rate:.0f} tokens/sec")
 ```
 
-### Multi-turn Conversation
-
-```python
-from chatjimmy import ChatJimmy
-
-client = ChatJimmy()
-
-messages = [{"role": "user", "content": "My name is Mohamed."}]
-resp = client.chat(messages)
-print(resp.text)
-
-messages.append({"role": "assistant", "content": resp.text})
-messages.append({"role": "user", "content": "What's my name?"})
-resp = client.chat(messages)
-print(resp.text)
-```
-
 ### Streaming
 
 ```python
@@ -100,124 +109,337 @@ for chunk in client.chat_stream(
 print()
 ```
 
-### Health Check
+---
 
-```python
-from chatjimmy import ChatJimmy
+## API Server
 
-client = ChatJimmy()
-health = client.health()
+### Quick Start
 
-print(health.healthy)       # True/False
-print(health.backend)       # "healthy"
-print(health.timestamp)     # ISO timestamp
+```bash
+# Install with server dependencies
+pip install "chatjimmy[server]"
+
+# Set API key
+export API_KEY="your-secret-api-key"
+
+# Start server
+python -m chatjimmy
 ```
 
-### List Models
+The server will start on `http://localhost:8000`.
+
+### API Documentation
+
+Once running, visit:
+
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
+- **Health Check**: http://localhost:8000/health
+
+### Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `API_KEY` | Recommended | - | API key for client authentication |
+| `CHATJIMMY_BASE_URL` | No | `https://chatjimmy.ai` | chatjimmy API base URL |
+| `CHATJIMMY_TIMEOUT` | No | `30` | Request timeout in seconds |
+| `PORT` | No | `8000` | Server port |
+| `HOST` | No | `0.0.0.0` | Server host |
+| `LOG_LEVEL` | No | `info` | Logging level |
+| `ALLOWED_ORIGINS` | No | `*` | CORS allowed origins |
+| `HTTP_PROXY` | No | - | HTTP proxy URL |
+| `HTTPS_PROXY` | No | - | HTTPS proxy URL |
+
+---
+
+## OpenAI SDK Compatibility
+
+Use any OpenAI-compatible SDK with your deployed server:
+
+### Python
 
 ```python
-from chatjimmy import ChatJimmy
+from openai import OpenAI
 
-client = ChatJimmy()
-
-for model in client.models():
-    print(f"{model.id} (by {model.owned_by})")
-```
-
-### Using Message Objects
-
-```python
-from chatjimmy import ChatJimmy, Message
-
-client = ChatJimmy()
-
-response = client.chat(
-    messages=[Message(role="user", content="Hello!")],
-    system_prompt="Reply in French.",
+client = OpenAI(
+    base_url="https://your-api.onrender.com/v1",
+    api_key="your-api-key",
 )
-print(response.text)
-```
 
-### Attachments
-
-```python
-from chatjimmy import ChatJimmy, Attachment
-
-client = ChatJimmy()
-
-attachment = Attachment(name="data.txt", size=11, content="hello world")
-response = client.chat(
-    messages=[{"role": "user", "content": "Summarize this file"}],
-    attachment=attachment,
+# Simple chat
+response = client.chat.completions.create(
+    model="llama3.1-8B",
+    messages=[{"role": "user", "content": "Hello!"}],
 )
-print(response.text)
+print(response.choices[0].message.content)
+
+# Streaming
+for chunk in client.chat.completions.create(
+    model="llama3.1-8B",
+    messages=[{"role": "user", "content": "Tell me a story"}],
+    stream=True,
+):
+    if chunk.choices[0].delta.content:
+        print(chunk.choices[0].delta.content, end="")
 ```
 
-## Response Stats
+### JavaScript/TypeScript
 
-Every chat response includes detailed inference stats from the Taalas HC1 hardware:
+```typescript
+import OpenAI from 'openai';
+
+const client = new OpenAI({
+  baseURL: 'https://your-api.onrender.com/v1',
+  apiKey: 'your-api-key',
+});
+
+const response = await client.chat.completions.create({
+  model: 'llama3.1-8B',
+  messages: [{ role: 'user', content: 'Hello!' }],
+});
+
+console.log(response.choices[0].message.content);
+```
+
+### cURL
+
+```bash
+curl https://your-api.onrender.com/v1/chat/completions \
+  -H "Authorization: Bearer your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "llama3.1-8B",
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'
+```
+
+---
+
+## Advanced Features
+
+### Tool Use / Function Calling
+
+> ⚠️ Tool use is simulated via prompt engineering. See [API Limitations](docs/api-limitations.md) for details.
 
 ```python
-response = client.chat(messages=[{"role": "user", "content": "hi"}])
-stats = response.stats
+from openai import OpenAI
 
-stats.prefill_tokens    # input tokens processed
-stats.prefill_rate      # input processing speed (tokens/sec)
-stats.decode_tokens     # output tokens generated
-stats.decode_rate       # output generation speed (tokens/sec)
-stats.total_tokens      # prefill + decode
-stats.ttft              # time to first token (seconds)
-stats.total_time        # total inference time (seconds)
-stats.roundtrip_time    # network round trip (ms)
-stats.done_reason       # "stop" (natural end)
+client = OpenAI(
+    base_url="https://your-api.onrender.com/v1",
+    api_key="your-api-key",
+)
+
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_weather",
+            "description": "Get current weather for a location",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "location": {"type": "string"}
+                },
+                "required": ["location"]
+            }
+        }
+    }
+]
+
+response = client.chat.completions.create(
+    model="llama3.1-8B",
+    messages=[{"role": "user", "content": "What's the weather in Paris?"}],
+    tools=tools,
+    tool_choice="auto",
+)
+
+# Check if model wants to call a tool
+if response.choices[0].finish_reason == "tool_calls":
+    tool_call = response.choices[0].message.tool_calls[0]
+    print(f"Tool: {tool_call.function.name}")
+    print(f"Arguments: {tool_call.function.arguments}")
 ```
 
-## API Reference
+### JSON Mode
 
-### `ChatJimmy(base_url, timeout)`
+> ⚠️ JSON mode is simulated via prompt engineering. See [API Limitations](docs/api-limitations.md) for details.
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `base_url` | `str` | `https://chatjimmy.ai` | API base URL |
-| `timeout` | `int` | `30` | Request timeout in seconds |
+```python
+response = client.chat.completions.create(
+    model="llama3.1-8B",
+    messages=[{
+        "role": "user",
+        "content": "List 3 planets in our solar system"
+    }],
+    response_format={"type": "json_object"},
+)
 
-### Methods
+import json
+data = json.loads(response.choices[0].message.content)
+print(data)
+```
 
-| Method | Description |
-|--------|-------------|
-| `ask(prompt, ...)` | Single-turn convenience method. Returns response text as string. |
-| `chat(messages, ...)` | Full chat method. Returns `ChatResponse` with `.text` and `.stats`. |
-| `chat_stream(messages, ...)` | Generator that yields text chunks as they arrive. |
-| `health()` | Returns `HealthStatus` with `.healthy` property. |
-| `models()` | Returns list of `Model` objects. |
+### JSON Schema
 
-### Chat Parameters
+```python
+response = client.chat.completions.create(
+    model="llama3.1-8B",
+    messages=[{
+        "role": "user",
+        "content": "Generate a user profile"
+    }],
+    response_format={
+        "type": "json_object",
+        "json_schema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "age": {"type": "integer"},
+                "email": {"type": "string"}
+            },
+            "required": ["name", "age"]
+        }
+    },
+)
+```
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `messages` | `list[dict \| Message]` | required | List of message dicts or `Message` objects |
-| `model` | `str` | `llama3.1-8B` | Model ID |
-| `system_prompt` | `str` | `""` | System prompt |
-| `top_k` | `int` | `8` | Top-K sampling parameter |
-| `attachment` | `Attachment` | `None` | File attachment |
+---
 
-## Known Limitations
+## Deployment
 
-- **Input limit**: ~6,064 prefill tokens. Requests exceeding this return an empty 200 response with no error.
-- **Output**: No hard cap. Model stops naturally via EOS token (~1,200-2,400 tokens typical).
-- **Model**: Only `llama3.1-8B` is available.
+### Deploy to Render (Recommended)
 
-## About Taalas
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy)
+
+**Manual deployment:**
+
+1. Fork this repository
+2. Create a new Web Service on [Render](https://render.com)
+3. Connect your forked repository
+4. Set environment variables:
+   - `API_KEY`: Your secret API key
+5. Deploy!
+
+See [docs/deployment.md](docs/deployment.md) for detailed instructions.
+
+### Docker
+
+```bash
+# Build
+docker build -t chatjimmy-api .
+
+# Run
+docker run -p 8000:8000 -e API_KEY=your-key chatjimmy-api
+```
+
+### Local Development
+
+```bash
+# Clone
+git clone https://github.com/pf-sjtu/chatjimmy-api.git
+cd chatjimmy-api
+
+# Install
+pip install -e ".[server]"
+
+# Configure
+cp .env.example .env
+# Edit .env with your settings
+
+# Run
+python -m chatjimmy
+```
+
+---
+
+## Configuration
+
+### Using .env File
+
+Create a `.env` file:
+
+```env
+API_KEY=your-secret-api-key
+CHATJIMMY_TIMEOUT=30
+LOG_LEVEL=info
+ALLOWED_ORIGINS=https://your-frontend.com
+```
+
+### Proxy Settings
+
+If you need to use a proxy to access chatjimmy.ai:
+
+```env
+HTTP_PROXY=http://proxy.example.com:8080
+HTTPS_PROXY=http://proxy.example.com:8080
+```
+
+---
+
+## Limitations
+
+This API is a compatibility layer over chatjimmy.ai, which has some inherent limitations:
+
+### Model Limitations
+
+- **Single Model**: Only `llama3.1-8B` is available
+- **Context Length**: ~6,064 tokens maximum input
+- **No Multi-modal**: Text only, no image/audio support
+
+### API Limitations
+
+- **Simulated Streaming**: chatjimmy.ai doesn't truly stream; we simulate it
+- **Tool Use**: Simulated via prompt engineering, not native
+- **JSON Mode**: Simulated via prompt engineering, no schema validation
+- **No logprobs**: Not supported by upstream API
+- **Temperature**: Mapped to `top_k`, not true temperature sampling
+
+For complete details, see [docs/api-limitations.md](docs/api-limitations.md).
+
+---
+
+## Documentation
+
+- [API Limitations](docs/api-limitations.md) - Detailed compatibility and limitations
+- [Deployment Guide](docs/deployment.md) - Deploy to Render, Docker, and more
+
+---
+
+## Project Structure
+
+```
+chatjimmy-api/
+├── src/chatjimmy/
+│   ├── __init__.py          # Package exports
+│   ├── client.py            # Original client library
+│   ├── server.py            # FastAPI server (NEW)
+│   ├── models.py            # Pydantic models (NEW)
+│   ├── config.py            # Configuration (NEW)
+│   └── __main__.py          # CLI entry point (NEW)
+├── docs/
+│   ├── api-limitations.md   # API limitations documentation
+│   └── deployment.md        # Deployment guide
+├── render.yaml              # Render deployment config
+├── .env.example             # Environment variables template
+├── pyproject.toml           # Project configuration
+└── README.md                # This file
+```
+
+---
+
+## How We Know It's Taalas
 
 The connection to Taalas was found in two places inside chatjimmy.ai itself:
 
-1. The main JS bundle contains footer links to `https://taalas.com/terms-conditions` and `https://taalas.com/privacy-policy`.
+1. The main JS bundle (`8642-*.js`) contains footer links to `https://taalas.com/terms-conditions` and `https://taalas.com/privacy-policy` in the chat disclaimer text.
 2. The `/api/models` endpoint returns `"owned_by": "Taalas Inc."` in the model metadata.
 
-## Disclaimer
-
-This is an **unofficial** wrapper. [chatjimmy.ai](https://chatjimmy.ai) is a public demo by [Taalas](https://taalas.com). The API has no authentication and could change or go offline at any time.
+---
 
 ## License
 
 MIT License - see [LICENSE](LICENSE) file for details.
+
+## Disclaimer
+
+This is an **unofficial** wrapper. [chatjimmy.ai](https://chatjimmy.ai) is a public demo by [Taalas](https://taalas.com). The API has no authentication and could change or go offline at any time.

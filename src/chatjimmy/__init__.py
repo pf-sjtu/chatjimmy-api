@@ -8,6 +8,29 @@ from chatjimmy.client import (
     Stats,
 )
 
+# Server components (optional import)
+try:
+    from chatjimmy.config import Settings, get_settings
+    from chatjimmy.models import (
+        ChatCompletionRequest,
+        ChatCompletionResponse,
+        ChatMessage,
+        ModelInfo,
+        ModelList,
+    )
+    
+    __server_imports__ = [
+        "Settings",
+        "get_settings",
+        "ChatCompletionRequest",
+        "ChatCompletionResponse",
+        "ChatMessage",
+        "ModelInfo",
+        "ModelList",
+    ]
+except ImportError:
+    __server_imports__ = []
+
 __all__ = [
     "Attachment",
     "ChatJimmy",
@@ -16,4 +39,5 @@ __all__ = [
     "Message",
     "Model",
     "Stats",
+    *__server_imports__,
 ]
