@@ -2,7 +2,7 @@ services:
   - type: web
     name: chatjimmy-api
     runtime: python
-    buildCommand: pip install -e ".[server]"
+    buildCommand: uv sync --frozen --extra server
     startCommand: uvicorn chatjimmy.server:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
@@ -13,6 +13,10 @@ services:
         value: https://chatjimmy.ai
       - key: CHATJIMMY_TIMEOUT
         value: 30
+      - key: ENABLE_TOOLS
+        value: "false"
+      - key: ENABLE_JSON_MODE
+        value: "false"
       - key: LOG_LEVEL
         value: info
       - key: ALLOWED_ORIGINS
