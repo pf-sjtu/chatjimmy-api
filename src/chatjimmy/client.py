@@ -226,9 +226,16 @@ class ChatJimmy:
         )
         r.raise_for_status()
 
+        # Use Response.iter_content with decode_unicode to properly handle UTF-8
+        # This avoids issues with multi-byte characters being split across chunks
         buffer = ""
-        for chunk in r.iter_content(chunk_size=256):
-            buffer += chunk.decode("utf-8", errors="replace")
+        for chunk in r.iter_content(chunk_size=256, decode_unicode=True):
+            if chunk:
+                buffer += chunk
+
+        # If decode_unicode didn't work (chunk is still bytes), decode manually
+        if isinstance(buffer, bytes):
+            buffer = buffer.decode("utf-8")
 
         # Separate stats from text
         match = _STATS_RE.search(buffer)

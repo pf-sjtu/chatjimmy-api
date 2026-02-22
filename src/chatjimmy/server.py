@@ -339,7 +339,7 @@ async def stream_chat_completion(
                 )
             ],
         )
-        yield f"data: {initial_chunk.model_dump_json()}\n\n"
+        yield f"data: {initial_chunk.model_dump_json(ensure_ascii=False)}\n\n"
         
         # Yield content chunks
         for i, word in enumerate(words):
@@ -356,7 +356,7 @@ async def stream_chat_completion(
                     )
                 ],
             )
-            yield f"data: {chunk.model_dump_json()}\n\n"
+            yield f"data: {chunk.model_dump_json(ensure_ascii=False)}\n\n"
             # Small delay to simulate streaming
             await asyncio.sleep(0.01)
         
@@ -373,7 +373,7 @@ async def stream_chat_completion(
                 )
             ],
         )
-        yield f"data: {final_chunk.model_dump_json()}\n\n"
+        yield f"data: {final_chunk.model_dump_json(ensure_ascii=False)}\n\n"
         yield "data: [DONE]\n\n"
         
     except Exception as e:
